@@ -62,7 +62,7 @@
     const statusDiv = document.getElementById('status');
 
     // Replace this with your actual n8n webhook URL
-    const N8N_WEBHOOK_URL = "https://n8n-tsbi.onrender.com/webhook-test/meeting";
+    const N8N_WEBHOOK_URL = "https://cors-anywhere.herokuapp.com/https://n8n-tsbi.onrender.com/webhook-test/meeting";
 
     consentCheckbox.addEventListener('change', () => {
       startBtn.disabled = !consentCheckbox.checked;
