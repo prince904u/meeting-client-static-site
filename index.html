@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Always Listening Office AI Assistant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 30px auto;
+      padding: 15px;
+      background: #f0f4f8;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    #status {
+      margin-top: 10px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      min-height: 40px;
+    }
+    label {
+      display: block;
+      margin: 20px 0 10px;
+    }
+    button {
+      background: #0078d7;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Always Listening Office AI Assistant</h1>
+
+  <label>
+    <input type="checkbox" id="consent" />
+    I consent to have this meeting transcribed and analyzed by AI. No sensitive info.
+  </label>
+
+  <button id="startBtn" disabled>Start Listening</button>
+
+  <div id="status">Consent required to enable listening.</div>
+
+  <script>
+    const consentCheckbox = document.getElementById('consent');
+    const startBtn = document.getElementById('startBtn');
+    const statusDiv = document.getElementById('status');
+
+    // Replace this with your actual n8n webhook URL
+    const N8N_WEBHOOK_URL = "https://n8n-tsbi.onrender.com/webhook-test/meeting";
+
+    consentCheckbox.addEventListener('change', () => {
+      startBtn.disabled = !consentCheckbox.checked;
+      statusDiv.textContent = consentCheckbox.checked ? 'Ready to start listening.' : 'Consent required to enable listening.';
+    });
+
+    let recognition;
+    let buffer = [];
+
+    function startListening() {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        statusDiv.textContent = 'Speech Recognition API not supported in this browser.';
+        return;
+      }
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        statusDiv.textContent = 'Listening... Speak now.';
+        startBtn.disabled = true;
+        consentCheckbox.disabled = true;
+      };
+
+      recognition.onerror = (event) => {
+        statusDiv.textContent = 'Error occurred in recognition: ' + event.error;
+      };
+
+      recognition.onend = () => {
+        statusDiv.textContent = 'Stopped listening. You can start again.';
+        startBtn.disabled = false;
+        consentCheckbox.disabled = false;
+      };
+
+      recognition.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            const transcript = event.results[i][0].transcript.trim();
+            buffer.push({ text: transcript, ts: Date.now() });
+            sendBufferToN8N();
+          }
+        }
+      };
+
+      recognition.start();
+    }
+
+    async function sendBufferToN8N() {
+      if (buffer.length === 0) return;
+
+      const payload = {
+        clientId: 'browser-client-1',
+        buffer: buffer.slice(-10) // send last 10 utterances
+      };
+
+      try {
+        const response = await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.speak) {
+            speakOutLoud(data.text || 'I have nothing to add.');
+          }
+        } else {
+          console.error('n8n webhook error:', response.status);
+        }
+      } catch (e) {
+        console.error('Failed to send buffer:', e);
+      }
+    }
+
+    function speakOutLoud(text) {
+      const synth = window.speechSynthesis;
+      if (!synth) {
+        console.warn('Speech synthesis not supported.');
+        return;
+      }
+
+      if (synth.speaking) {
+        synth.cancel(); // stop previous speech
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      synth.speak(utterance);
+      statusDiv.textContent = 'Assistant: ' + text;
+    }
+
+    startBtn.addEventListener('click', () => {
+      startListening();
+    });
+  </script>
+
+</body>
+</html>
